@@ -13,7 +13,7 @@ import { writePack, DESCRIPTOR } from './helpers/fixture.js';
 
 const CANDIDATE_DESCRIPTOR = DESCRIPTOR.replace('id: gate-fixture', 'id: candidate-fixture');
 
-const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const pack = (t, opts) => {
   const dir = writePack(opts);
   t.after(() => rmSync(dir, { recursive: true, force: true }));
