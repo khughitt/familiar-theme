@@ -1,1 +1,7 @@
 node_modules/
+
+# SDD workspace (ledgers, review packages, absolute local paths). Ignored
+# globally on this machine, but listed here too so a fresh clone, another
+# machine, or a contributor's `git add -A` can't re-stage it.
+.worktrees/
+.superpowers/
