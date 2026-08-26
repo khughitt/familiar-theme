@@ -83,7 +83,7 @@ const shown = (value) => (typeof value === 'string' ? JSON.stringify(value) : St
 // `presona:` used to surface as "missing persona", which points the author at
 // the wrong line entirely, and a key from a future spec-version passed unread.
 const THEME_KEYS = new Set(['spec-version', 'id', 'label', 'description', 'rows', 'members']);
-const MEMBER_KEYS = new Set(['id', 'asset-root', 'label', 'slots', 'persona', 'animation', 'poses']);
+const MEMBER_KEYS = new Set(['id', 'asset-root', 'label', 'slots', 'persona', 'animation', 'poses', 'anchor']);
 
 function assertClosed(object, allowed, what) {
   for (const key of Object.keys(object)) {
@@ -120,6 +120,20 @@ function parseRows(raw, themeId) {
   if (raw < ROW_MIN || raw > ROW_MAX) {
     throw new Error(
       `theme "${themeId}": rows is ${raw} — rows must be between ${ROW_MIN} and ${ROW_MAX} inclusive`
+    );
+  }
+  return raw;
+}
+
+// PER-MEMBER, because a roster legitimately mixes grounded members with
+// floaters. `floor` is the default and the only behavior that existed before
+// spec 0.2.0 packs; `center` floats the pose in its shared canvas.
+const ANCHORS = ['floor', 'center'];
+function parseAnchor(raw, themeId, memberId) {
+  if (raw === undefined) return 'floor';
+  if (!ANCHORS.includes(raw)) {
+    throw new Error(
+      `theme "${themeId}": member "${memberId}": anchor must be "floor" or "center" (found ${shown(raw)})`
     );
   }
   return raw;
@@ -302,6 +316,7 @@ export function parseThemePack(text, dir, { descriptorLabel = `${dir}/theme.yaml
       persona: raw.persona.trim(),
       ...asset,
       animation: parseAnimation(raw.animation, data.id, raw.id),
+      anchor: parseAnchor(raw.anchor, data.id, raw.id),
       poses: Object.fromEntries(STATES.map((s) => [s, poses[s].trim()])),
     });
 

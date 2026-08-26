@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SPEC_VERSION, SLOT_COUNT } from 'familiar-theme';
+import { SPEC_VERSION, SLOT_COUNT, loadThemePackSync } from 'familiar-theme';
+import { writePack, DESCRIPTOR } from './helpers/fixture.js';
 
 test('the barrel exposes the contract constants', () => {
   assert.equal(SPEC_VERSION, 1);
@@ -33,4 +34,23 @@ test('a deep import by package name does not resolve', async () => {
     () => import('familiar-theme/src/theme/pack.js'),
     /ERR_PACKAGE_PATH_NOT_EXPORTED/,
   );
+});
+
+test('a member without anchor defaults to floor', () => {
+  const dir = writePack();
+  assert.equal(loadThemePackSync(dir).members.get('solo').anchor, 'floor');
+});
+
+test('anchor: center is parsed onto the member record', () => {
+  const dir = writePack({
+    descriptor: DESCRIPTOR.replace('    animation:', '    anchor: center\n    animation:'),
+  });
+  assert.equal(loadThemePackSync(dir).members.get('solo').anchor, 'center');
+});
+
+test('a junk anchor is refused with both legal values named', () => {
+  const dir = writePack({
+    descriptor: DESCRIPTOR.replace('    animation:', '    anchor: ceiling\n    animation:'),
+  });
+  assert.throws(() => loadThemePackSync(dir), /anchor must be "floor" or "center"/);
 });
