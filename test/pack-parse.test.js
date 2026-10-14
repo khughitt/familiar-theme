@@ -20,7 +20,7 @@ const BARREL_EXPORTS = [
   'SLOT_COUNT', 'SPEC_VERSION', 'STATES', 'assertId', 'assertSlot', 'assertState',
   'assetsFor', 'crc32', 'decodeRgba', 'defaultMemberForSlot', 'encodeRgba', 'loadAnimationMember',
   'loadAnimationRefSync', 'loadThemePack', 'loadThemePackSync', 'memberAssetDir',
-  'memberOrThrow', 'parseThemePack', 'pngSize', 'validateThemePack',
+  'memberOrThrow', 'packEntryRole', 'parseThemePack', 'pngSize', 'validateThemePack',
 ];
 
 test('the barrel exports exactly this set and nothing else', async () => {

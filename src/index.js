@@ -9,6 +9,7 @@ export {
 } from './theme/pack.js';
 export { CLIP_ROLES, ROLE_SPEC, loadAnimationMember, loadAnimationRefSync } from './theme/animation.js';
 export { assetsFor } from './theme/assets.js';
+export { packEntryRole } from './theme/content.js';
 export { STATES, assertState } from './protocol/state.js';
 export { SLOT_COUNT, assertSlot } from './protocol/slots.js';
 export { crc32, pngSize, decodeRgba, encodeRgba } from './png.js';
