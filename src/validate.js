@@ -1,12 +1,14 @@
 import {
   opendir, lstat as fsLstat, open as fsOpen, readFile as fsReadFile, realpath as fsRealpath,
 } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { LIMITS } from './limits.js';
 import { STATES } from './protocol/state.js';
 import { decodeRgba, pngSize } from './png.js';
 import { loadAnimationMember } from './theme/animation.js';
-import { loadThemePack } from './theme/pack.js';
+import { packEntryRole } from './theme/content.js';
+import { loadThemePack, parseThemePack } from './theme/pack.js';
 
 const LFS_SIG = Buffer.from('version https://git-lfs.github.com/spec/v1');
 const fail = (rel, why) => { throw new Error(`${rel}: ${why}`); };
@@ -31,7 +33,53 @@ async function assertMaterialized(path, rel) {
   }
 }
 
-async function preflight(root, { candidatePath, isCandidate }) {
+const kindOf = (stat, entry) => (stat.isSymbolicLink() || entry?.isSymbolicLink() ? 'a symlink'
+  : stat.isFIFO() ? 'a FIFO' : stat.isSocket() ? 'a socket'
+  : stat.isFile() ? 'a regular file' : 'not a regular file');
+
+// The descriptor's one read (spec §2): roles, walk and load all use these bytes.
+// A second read could be rewritten to name an outside alias that resolves to an
+// already-walked directory, and coverage would pass through it.
+//
+// The read is bounded, not just pre-checked: the pack directory is the author's,
+// so the file can grow after lstat. At most MAX_DESCRIPTOR_BYTES + 1 bytes are
+// ever held; the extra byte proves the descriptor is over the bound.
+async function readDescriptor(path, rel, afterStat = () => {}) {
+  const stat = await fsLstat(path);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    fail(rel, `is ${kindOf(stat)} — packs may contain only regular files and directories`);
+  }
+  if (stat.size > LIMITS.MAX_DESCRIPTOR_BYTES) {
+    fail(rel, `is ${stat.size} bytes — descriptors are bounded at ${LIMITS.MAX_DESCRIPTOR_BYTES} (MAX_DESCRIPTOR_BYTES)`);
+  }
+  afterStat(path);
+  const handle = await fsOpen(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const held = await handle.stat();
+    if (!held.isFile() || held.dev !== stat.dev || held.ino !== stat.ino) {
+      fail(rel, 'changed while the gate read it — validate a stable pack');
+    }
+    const buffer = Buffer.alloc(LIMITS.MAX_DESCRIPTOR_BYTES + 1);
+    let filled = 0;
+    while (filled < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, filled, buffer.length - filled, filled);
+      if (bytesRead === 0) break;
+      filled += bytesRead;
+    }
+    if (filled > LIMITS.MAX_DESCRIPTOR_BYTES) {
+      fail(rel, `is more than ${LIMITS.MAX_DESCRIPTOR_BYTES} bytes — descriptors are bounded at ${LIMITS.MAX_DESCRIPTOR_BYTES} (MAX_DESCRIPTOR_BYTES)`);
+    }
+    const bytes = buffer.subarray(0, filled);
+    if (bytes.subarray(0, LFS_SIG.length).equals(LFS_SIG)) {
+      throw new Error(`${rel} is a Git LFS pointer; v1 themes must contain materialized files`);
+    }
+    return bytes;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function preflight(root, { candidatePath, pack, descriptorBytes }) {
   let entries = 0;
   let totalBytes = 0;
   const pngs = [];
@@ -52,42 +100,35 @@ async function preflight(root, { candidatePath, isCandidate }) {
     if (rel.endsWith('.png') && stat.size > LIMITS.MAX_ASSET_BYTES) {
       fail(rel, `is ${stat.size} bytes — the bound is ${LIMITS.MAX_ASSET_BYTES} (MAX_ASSET_BYTES)`);
     }
-    if (basename(rel) === 'animation.yaml' || rel === 'theme.yaml') {
-      if (stat.size > LIMITS.MAX_DESCRIPTOR_BYTES) {
-        fail(rel, `is ${stat.size} bytes — descriptors are bounded at ${LIMITS.MAX_DESCRIPTOR_BYTES} (MAX_DESCRIPTOR_BYTES)`);
-      }
+    if (basename(rel) === 'animation.yaml' && stat.size > LIMITS.MAX_DESCRIPTOR_BYTES) {
+      fail(rel, `is ${stat.size} bytes — descriptors are bounded at ${LIMITS.MAX_DESCRIPTOR_BYTES} (MAX_DESCRIPTOR_BYTES)`);
     }
     await assertMaterialized(path, rel);
     if (rel.endsWith('.png')) pngs.push(path);
   };
-  const walk = async (dir) => {
+  count(1);
+  addBytes(descriptorBytes, 'theme.yaml');
+  const walk = async (dir, relDir) => {
     const handle = await opendir(dir);
     for await (const entry of handle) {
       const path = join(dir, entry.name);
-      const rel = relative(root, path);
-      if (isCandidate && dir === root
-          && (entry.name === 'theme.yaml' || path === candidatePath)) continue;
+      if (relDir === '' && (entry.name === 'theme.yaml' || path === candidatePath)) continue;
+      const rel = relDir === '' ? entry.name : `${relDir}/${entry.name}`;
+      const role = packEntryRole(pack, rel);
+      if (role === 'outside') continue;
       const stat = await fsLstat(path);
-      if (stat.isDirectory()) { count(1); await walk(path); continue; }
+      if (stat.isDirectory() && !entry.isSymbolicLink()) { count(1); await walk(path, rel); continue; }
+      if (role === 'ancestor') {
+        fail(rel, `is ${kindOf(stat, entry)} — it lies on a member's asset-root and must be a directory`);
+      }
       if (!stat.isFile() || entry.isSymbolicLink() || stat.isSymbolicLink()) {
-        const kind = stat.isSymbolicLink() || entry.isSymbolicLink() ? 'a symlink'
-          : stat.isFIFO() ? 'a FIFO' : stat.isSocket() ? 'a socket' : 'not a regular file';
-        fail(rel, `is ${kind} — packs may contain only regular files and directories`);
+        fail(rel, `is ${kindOf(stat, entry)} — packs may contain only regular files and directories`);
       }
       count(1);
       await checkFile(path, rel, stat);
     }
   };
-  await walk(root);
-
-  if (isCandidate) {
-    const stat = await fsLstat(candidatePath);
-    if (!stat.isFile() || stat.isSymbolicLink()) {
-      throw new Error('candidate descriptor must be a regular non-symlink file');
-    }
-    count(1);
-    await checkFile(candidatePath, 'theme.yaml', stat);
-  }
+  await walk(root, '');
   return { pngs };
 }
 
@@ -97,6 +138,7 @@ export async function validateThemePack(dir, { descriptorPath } = {}) {
 
 export async function validateThemePackWithLoader(dir, {
   descriptorPath, loadAnimation = loadAnimationMember,
+  afterDescriptorStat = () => {}, afterDescriptorRead = () => {},
 } = {}) {
   const root = await fsRealpath(dir);
   let candidatePath;
@@ -115,7 +157,7 @@ export async function validateThemePackWithLoader(dir, {
     }
   }
   try {
-    return await validateResolved(root, candidatePath, loadAnimation);
+    return await validateResolved(root, candidatePath, loadAnimation, { afterDescriptorStat, afterDescriptorRead });
   } catch (cause) {
     if (cause?.message?.includes(root)) {
       const rootPrefix = root.endsWith(sep) ? root : root + sep;
@@ -125,13 +167,32 @@ export async function validateThemePackWithLoader(dir, {
   }
 }
 
-async function validateResolved(root, candidatePath, loadAnimation) {
+async function validateResolved(root, candidatePath, loadAnimation, { afterDescriptorStat, afterDescriptorRead }) {
   const isCandidate = candidatePath !== join(root, 'theme.yaml');
   if (isCandidate && dirname(candidatePath) !== root) {
     throw new Error('candidate descriptor must be a sibling of theme.yaml inside the pack root');
   }
-  const found = await preflight(root, { candidatePath, isCandidate });
-  const pack = await loadThemePack(root, { descriptorPath: candidatePath, descriptorLabel: 'theme.yaml' });
+  if (isCandidate) {
+    const stat = await fsLstat(candidatePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      throw new Error('candidate descriptor must be a regular non-symlink file');
+    }
+  }
+  const descriptorBytes = await readDescriptor(candidatePath, 'theme.yaml', afterDescriptorStat);
+  afterDescriptorRead(candidatePath);
+  const descriptorText = descriptorBytes.toString('utf8');
+  const parsed = parseThemePack(descriptorText, root, { descriptorLabel: 'theme.yaml' });
+  const found = await preflight(root, { candidatePath, pack: parsed, descriptorBytes: descriptorBytes.length });
+  const pack = await loadThemePack(root, {
+    descriptorPath: candidatePath,
+    descriptorLabel: 'theme.yaml',
+    readFile: async (path) => {
+      if (path !== candidatePath) {
+        throw new Error('theme.yaml: the descriptor moved during validation — validate a stable pack');
+      }
+      return descriptorText;
+    },
+  });
   for (const member of pack.members.values()) {
     if (member.assetRootFault) throw member.assetRootFault;
   }

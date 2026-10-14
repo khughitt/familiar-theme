@@ -60,7 +60,7 @@ test('gate errors are pack-relative, never absolute', async (t) => {
 
 test('a symlink is rejected by type even when it points INSIDE the pack', async (t) => {
   const dir = pack(t);
-  symlinkSync(join(dir, 'theme.yaml'), join(dir, 'inner-link'));
+  symlinkSync(join(dir, 'theme.yaml'), join(dir, 'sprites', 'solo', 'inner-link'));
   await rejects(dir, /inner-link.*symlink/);
 });
 
@@ -76,14 +76,14 @@ test('a symlinked descriptor rejects', async (t) => {
 test('a unix socket is rejected by type', async (t) => {
   const dir = pack(t);
   const server = createServer();
-  await new Promise((ok) => server.listen(join(dir, 'sock'), ok));
+  await new Promise((ok) => server.listen(join(dir, 'sprites', 'solo', 'sock'), ok));
   t.after(() => server.close());
   await rejects(dir, /sock.*(socket|not a regular file)/);
 });
 
 test('a FIFO is rejected by type, not opened (child process, hard timeout)', (t) => {
   const dir = pack(t);
-  execFileSync('mkfifo', [join(dir, 'sprites', 'trap')]);
+  execFileSync('mkfifo', [join(dir, 'sprites', 'solo', 'trap')]);
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', `
     import { validateThemePack } from 'familiar-theme';
     try { await validateThemePack(${JSON.stringify(dir)}); console.log('ACCEPTED'); }
@@ -95,11 +95,11 @@ test('a FIFO is rejected by type, not opened (child process, hard timeout)', (t)
 
 test('an empty-directory tree breaches MAX_ENTRY_COUNT; at the limit it passes', async (t) => {
   const at = pack(t);
-  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9; i++) mkdirSync(join(at, `d${i}`));
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9; i++) mkdirSync(join(at, 'sprites', 'solo', `d${i}`));
   await validateThemePack(at);
 
   const over = pack(t);
-  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9 + 1; i++) mkdirSync(join(over, `d${i}`));
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9 + 1; i++) mkdirSync(join(over, 'sprites', 'solo', `d${i}`));
   await rejects(over, /MAX_ENTRY_COUNT|entries/);
 });
 
@@ -116,7 +116,7 @@ test('MAX_TOTAL_BYTES: sparse filler at the limit passes, one byte over fails', 
     return total;
   };
   const fill = (dir, target) => {
-    const fd = openSync(join(dir, 'filler.bin'), 'w');
+    const fd = openSync(join(dir, 'sprites', 'solo', 'filler.bin'), 'w');
     ftruncateSync(fd, target - sizeOf(dir));
     closeSync(fd);
   };
@@ -177,7 +177,7 @@ test('whole-pack strict: a fault loadThemePack tolerates, the gate throws', asyn
 test('a candidate descriptorPath replaces theme.yaml: parsed, counted once, live one not counted', async (t) => {
   const dir = pack(t);
   writeFileSync(join(dir, '.theme.yaml.candidate'), CANDIDATE_DESCRIPTOR);
-  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9; i++) mkdirSync(join(dir, `d${i}`));
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9; i++) mkdirSync(join(dir, 'sprites', 'solo', `d${i}`));
   const p = await validateThemePack(dir, { descriptorPath: join(dir, '.theme.yaml.candidate') });
   assert.equal(p.id, 'candidate-fixture');
 });
@@ -217,7 +217,7 @@ test('a candidate beneath a nonexistent external parent rejects pack-relatively'
 test('a pack at EXACTLY both limits validates through the candidate seam', async (t) => {
   const dir = pack(t);
   writeFileSync(join(dir, '.theme.yaml.candidate'), DESCRIPTOR);
-  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9 - 1; i++) mkdirSync(join(dir, `d${i}`));
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9 - 1; i++) mkdirSync(join(dir, 'sprites', 'solo', `d${i}`));
   const logicalBytes = () => {
     let total = 0;
     const walk = (d) => {
@@ -231,11 +231,11 @@ test('a pack at EXACTLY both limits validates through the candidate seam', async
     walk(dir);
     return total + statSync(join(dir, '.theme.yaml.candidate')).size;
   };
-  const fd = openSync(join(dir, 'filler.bin'), 'w');
+  const fd = openSync(join(dir, 'sprites', 'solo', 'filler.bin'), 'w');
   ftruncateSync(fd, 0);
   closeSync(fd);
   const pad = LIMITS.MAX_TOTAL_BYTES - logicalBytes();
-  const fd2 = openSync(join(dir, 'filler.bin'), 'w');
+  const fd2 = openSync(join(dir, 'sprites', 'solo', 'filler.bin'), 'w');
   ftruncateSync(fd2, pad);
   closeSync(fd2);
   const p = await validateThemePack(dir, { descriptorPath: join(dir, '.theme.yaml.candidate') });
