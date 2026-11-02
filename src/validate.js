@@ -26,7 +26,7 @@ async function assertMaterialized(path, rel) {
   try {
     const { buffer, bytesRead } = await handle.read(Buffer.alloc(LFS_SIG.length), 0, LFS_SIG.length, 0);
     if (bytesRead === LFS_SIG.length && buffer.equals(LFS_SIG)) {
-      throw new Error(`${rel} is a Git LFS pointer; v1 themes must contain materialized files`);
+      throw new Error(`${rel} is a Git LFS pointer; themes must contain materialized files`);
     }
   } finally {
     await handle.close();
@@ -71,7 +71,7 @@ async function readDescriptor(path, rel, afterStat = () => {}) {
     }
     const bytes = buffer.subarray(0, filled);
     if (bytes.subarray(0, LFS_SIG.length).equals(LFS_SIG)) {
-      throw new Error(`${rel} is a Git LFS pointer; v1 themes must contain materialized files`);
+      throw new Error(`${rel} is a Git LFS pointer; themes must contain materialized files`);
     }
     return bytes;
   } finally {
@@ -119,7 +119,7 @@ async function preflight(root, { candidatePath, pack, descriptorBytes }) {
       const stat = await fsLstat(path);
       if (stat.isDirectory() && !entry.isSymbolicLink()) { count(1); await walk(path, rel); continue; }
       if (role === 'ancestor') {
-        fail(rel, `is ${kindOf(stat, entry)} — it lies on a member's asset-root and must be a directory`);
+        fail(rel, `is ${kindOf(stat, entry)} — it lies on a member's or the world's asset-root and must be a directory`);
       }
       if (!stat.isFile() || entry.isSymbolicLink() || stat.isSymbolicLink()) {
         fail(rel, `is ${kindOf(stat, entry)} — packs may contain only regular files and directories`);

@@ -133,7 +133,7 @@ test('a Git LFS pointer rejects wherever it sits, with the materialized-files me
   const POINTER = 'version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 12\n';
   const asAsset = pack(t);
   writeFileSync(join(asAsset, 'sprites', 'pip', 'idle.png'), POINTER);
-  await rejects(asAsset, /sprites\/pip\/idle\.png is a Git LFS pointer; v1 themes must contain materialized files/);
+  await rejects(asAsset, /sprites\/pip\/idle\.png is a Git LFS pointer; themes must contain materialized files/);
 
   const asData = pack(t);
   writeFileSync(join(asData, 'sprites', 'pip', 'provenance.json'), POINTER);
