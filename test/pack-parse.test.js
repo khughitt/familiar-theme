@@ -16,8 +16,8 @@ test('the barrel exposes the contract constants', () => {
 // consumer at import time with no test in this package going red first. A
 // deliberate change to the surface edits this list; an accidental one fails here.
 const BARREL_EXPORTS = [
-  'CLIP_ROLES', 'DEFAULT_ROWS', 'ID_RE', 'LIMITS', 'ROLE_SPEC', 'ROW_MAX', 'ROW_MIN',
-  'SLOT_COUNT', 'SPEC_VERSION', 'STATES', 'assertId', 'assertSlot', 'assertState',
+  'CLIP_ROLES', 'DEFAULT_ROLE', 'DEFAULT_ROWS', 'ID_RE', 'LIMITS', 'LOCALES', 'ROLE_SPEC', 'ROW_MAX', 'ROW_MIN',
+  'SLOT_COUNT', 'SPEC_VERSION', 'STATES', 'assertId', 'assertLocale', 'assertSlot', 'assertState',
   'assetsFor', 'crc32', 'decodeRgba', 'defaultMemberForSlot', 'encodeRgba', 'loadAnimationMember',
   'loadAnimationRefSync', 'loadThemePack', 'loadThemePackSync', 'memberAssetDir',
   'memberOrThrow', 'packEntryRole', 'parseThemePack', 'pngSize', 'validateThemePack',

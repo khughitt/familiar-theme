@@ -66,10 +66,10 @@ test('at the dimension limits, a real asset decodes clean', async (t) => {
 
 test('MAX_DECODED_TOTAL trips from accounting BEFORE any IDAT reaches zlib', async (t) => {
   const dir = pack(t);
-  // 17 headers promising 32 MiB decoded each (544 MiB total), all with invalid
+  // 33 headers promising 32 MiB decoded each (1056 MiB total, over the 1 GiB limit), all with invalid
   // IDAT. If decode ran first the error would be an inflate error; it must be
   // the accounting error.
-  for (let i = 0; i < 17; i++) {
+  for (let i = 0; i < 33; i++) {
     writeFileSync(join(dir, 'sprites', 'solo', `promise-${String(i).padStart(2, '0')}.png`),
       headerOnlyPng(4096, 2048));
   }
