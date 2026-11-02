@@ -157,7 +157,10 @@ test('a locale image whose size differs from the world size is refused', async (
 test('a world directory that fails its proof throws the loader fault', async (t) => {
   const dir = worldPack(t);
   rmSync(join(dir, 'world'), { recursive: true });
-  await assert.rejects(() => validateThemePack(dir), /world/);
+  await assert.rejects(
+    () => validateThemePack(dir),
+    (e) => e.message === 'theme "gate-fixture": world: asset-root "world" does not exist (world)',
+  );
 });
 
 test('a world pack counts its files in the entry bound', async (t) => {
