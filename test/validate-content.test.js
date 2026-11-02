@@ -7,7 +7,7 @@ import {
 } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { LIMITS, validateThemePack } from 'familiar-theme';
+import { LIMITS, encodeRgba, validateThemePack } from 'familiar-theme';
 import { validateThemePackWithLoader } from '../src/validate.js';
 import { DESCRIPTOR, writePack } from './helpers/fixture.js';
 
@@ -106,4 +106,70 @@ test('the descriptor is read once: a rewrite through an outside alias is never s
   });
   assert.equal(reads, 1);
   assert.equal(p.members.get('pip').assetRoot, 'sprites/pip');
+});
+
+// A two-locale world (4x3) so the gate has an image to miss and an image to mis-size.
+const WORLD_2 = `world:
+  asset-root: world
+  size: [4, 3]
+  locales:
+    home: { image: home.png, places: [[0, 0]] }
+    scoped: { image: scoped.png, places: [[1, 1]] }
+`;
+const solid = (w, h) => encodeRgba({ w, h, buf: new Uint8Array(w * h * 4).fill(255) });
+const worldPack = (t, { scoped = solid(4, 3), home = solid(4, 3) } = {}) => {
+  const dir = writePack({ descriptor: DESCRIPTOR + WORLD_2 });
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'world'));
+  writeFileSync(join(dir, 'world', 'home.png'), home);
+  if (scoped) writeFileSync(join(dir, 'world', 'scoped.png'), scoped);
+  return dir;
+};
+
+test('a world pack with every locale image validates and keeps its locales', async (t) => {
+  const p = await validateThemePack(worldPack(t));
+  assert.equal(p.world.locales.size, 2);
+});
+
+test('a world pack validates through a symlinked path to the theme directory', async (t) => {
+  const dir = worldPack(t);
+  const link = `${dir}-link`;
+  symlinkSync(dir, link);
+  t.after(() => rmSync(link, { force: true }));
+  const p = await validateThemePack(link);
+  assert.equal(p.world.locales.size, 2);
+});
+
+test('a locale image the pack does not hold is refused as not walked', async (t) => {
+  await assert.rejects(
+    () => validateThemePack(worldPack(t, { scoped: null })),
+    /world: locale "scoped" image world\/scoped\.png was not walked by the gate/,
+  );
+});
+
+test('a locale image whose size differs from the world size is refused', async (t) => {
+  await assert.rejects(
+    () => validateThemePack(worldPack(t, { home: solid(10, 10) })),
+    /world: locale "home" is 10x10 — the world size is 4x3/,
+  );
+});
+
+test('a world directory that fails its proof throws the loader fault', async (t) => {
+  const dir = worldPack(t);
+  rmSync(join(dir, 'world'), { recursive: true });
+  await assert.rejects(() => validateThemePack(dir), /world/);
+});
+
+test('a world pack counts its files in the entry bound', async (t) => {
+  const dir = worldPack(t);
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT; i++) writeFileSync(join(dir, 'world', `x${i}.txt`), '');
+  await assert.rejects(() => validateThemePack(dir), /MAX_ENTRY_COUNT/);
+});
+
+test('a pack with 65 members is refused at parse, before any walk', async (t) => {
+  const members = Array.from({ length: 65 }, (_, i) => DESCRIPTOR.split('members:\n')[1]
+    .replace('id: pip', `id: m${i}`).replace('sprites/pip', `sprites/m${i}`).replace('roles: [default]', 'roles: []'));
+  const dir = pack(t);
+  writeFileSync(join(dir, 'theme.yaml'), `${DESCRIPTOR.split('members:\n')[0]}members:\n${members.join('')}`);
+  await assert.rejects(() => validateThemePack(dir), /65 members — the bound is 64 \(MAX_MEMBERS\)/);
 });

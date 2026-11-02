@@ -196,6 +196,7 @@ async function validateResolved(root, candidatePath, loadAnimation, { afterDescr
   for (const member of pack.members.values()) {
     if (member.assetRootFault) throw member.assetRootFault;
   }
+  if (pack.world?.assetRootFault) throw pack.world.assetRootFault;
 
   // PASS 1 — headers, every PNG, accounting before any inflate (spec §2).
   // The buffers read here are RETAINED and pass 2 decodes those exact bytes:
@@ -225,6 +226,27 @@ async function validateResolved(root, candidatePath, loadAnimation, { afterDescr
       const asset = join(member.assetDir, `${state}.png`);
       if (!retained.has(asset)) {
         throw new Error(`member "${member.id}" is missing state "${state}" (${relative(root, asset)})`);
+      }
+    }
+  }
+
+  // Declared locale images: retained (walked) like the state PNGs, and exactly the
+  // world's size. `root` is a realpath, so the retained keys and the loader-proven
+  // `imagePath` are both real paths.
+  if (pack.world) {
+    const { width, height } = pack.world.size;
+    for (const [name, locale] of pack.world.locales) {
+      const bytes = retained.get(locale.imagePath);
+      if (!bytes) {
+        throw new Error(
+          `world: locale "${name}" image ${relative(root, locale.imagePath)} was not walked by the gate`,
+        );
+      }
+      const size = pngSize(bytes);
+      if (size.w !== width || size.h !== height) {
+        throw new Error(
+          `world: locale "${name}" is ${size.w}x${size.h} — the world size is ${width}x${height}`,
+        );
       }
     }
   }

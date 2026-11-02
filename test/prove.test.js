@@ -183,7 +183,7 @@ test('localeAssetFor throws when the locale image is a symlink', (t) => {
   swapForSymlink(join(pack.world.assetDir, 'home.png'));
   assert.throws(
     () => localeAssetFor(pack, 'home'),
-    /world: locale "home": .*home\.png is not a regular non-symlink file/,
+    /theme "[^"]+": world: locale "home": .*home\.png is not a regular non-symlink file/,
   );
 });
 

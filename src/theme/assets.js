@@ -81,6 +81,6 @@ export function localeAssetFor(pack, name, {
       + 'has not been filesystem-proven by a theme loader',
     );
   }
-  proveRegularFile(locale.imagePath, world.assetDir, { lstat, realpath }, `world: locale "${name}"`);
+  proveRegularFile(locale.imagePath, world.assetDir, { lstat, realpath }, `theme "${pack.id}": world: locale "${name}"`);
   return { image: locale.imagePath, size: world.size, places: locale.places };
 }
