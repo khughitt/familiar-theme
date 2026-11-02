@@ -1,8 +1,9 @@
 // Pack content (familiar docs/specs/2026-10-14-pack-content-design.md §1). A
 // pack is its descriptor and what the descriptor names, not the directory that
 // holds it. Content is closed under descent: the content subtrees (licence
-// directories, member asset trees and the world's asset tree) are defined by a prefix of the path, so a
-// walker that asks at every depth never drops a descendant.
+// directories, member asset trees and the world's asset tree) are defined by a
+// prefix of the path, so a walker that asks at every depth never drops a
+// descendant.
 //
 // The licence rule is the one convention here: an installed copy keeps the terms
 // its assets were granted under, and every repository already names those files
