@@ -3,17 +3,13 @@ import assert from 'node:assert/strict';
 import { packEntryRole, parseThemePack } from 'familiar-theme';
 import { DESCRIPTOR } from './helpers/fixture.js';
 
-// Two members with different ancestors. Every slot needs a member and no member
-// may hold none, so solo gives up slot 11 to duo.
+// Two members with different ancestors. pip keeps the default role; duo holds none.
 const TWO = DESCRIPTOR.replace(
-  'slots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]',
-  'slots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]',
-).replace(
   'members:\n',
   `members:
   - id: duo
     label: Duo
-    slots: [11]
+    roles: []
     persona: second fixture
     asset-root: art/sprites/duo
     animation:
@@ -39,7 +35,7 @@ test('the descriptor and licence entries are content', () => {
 
 test('member trees are content at every depth', () => {
   for (const rel of [
-    'sprites/solo', 'sprites/solo/idle.png', 'sprites/solo/animation/idle/f01.png',
+    'sprites/pip', 'sprites/pip/idle.png', 'sprites/pip/animation/idle/f01.png',
     'art/sprites/duo', 'art/sprites/duo/provenance.json',
   ]) assert.equal(packEntryRole(pack, rel), 'content', rel);
 });
@@ -53,7 +49,7 @@ test('proper prefixes of an asset-root are ancestors, shared or not', () => {
 test('everything else is outside, including siblings under an ancestor', () => {
   for (const rel of [
     '.worktrees', '.superpowers', '.superpowers/x', 'README.md', 'docs', 'docs/a.md',
-    '.git', 'sprites/README.md', 'sprites/.DS_Store', 'sprites/solo-old',
+    '.git', 'sprites/README.md', 'sprites/.DS_Store', 'sprites/pip-old',
     'art/README', 'art/sprites/other', 'theme.yaml.bak', 'node_modules',
   ]) assert.equal(packEntryRole(pack, rel), 'outside', rel);
 });

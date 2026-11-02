@@ -24,7 +24,7 @@ const rejects = (dir, re, opts) => assert.rejects(() => validateThemePack(dir, o
 test('the happy path returns the proven pack', async (t) => {
   const p = await validateThemePack(pack(t));
   assert.equal(p.id, 'gate-fixture');
-  assert.equal(p.members.get('solo').assetDirProof, 'filesystem');
+  assert.equal(p.members.get('pip').assetDirProof, 'filesystem');
 });
 
 test('a symlinked PACK ROOT validates with the default descriptor', async (t) => {
@@ -49,10 +49,10 @@ test('a symlinked PACK ROOT accepts a candidate spelled through its real path', 
 
 test('gate errors are pack-relative, never absolute', async (t) => {
   const dir = pack(t);
-  symlinkSync('/etc/passwd', join(dir, 'sprites', 'solo', 'evil.png'));
+  symlinkSync('/etc/passwd', join(dir, 'sprites', 'pip', 'evil.png'));
   const real = realpathSync(dir);
   await assert.rejects(() => validateThemePack(dir), (e) => {
-    assert.match(e.message, /sprites\/solo\/evil\.png/);
+    assert.match(e.message, /sprites\/pip\/evil\.png/);
     assert.ok(!e.message.includes(real), 'leaked the absolute pack path');
     return true;
   });
@@ -60,7 +60,7 @@ test('gate errors are pack-relative, never absolute', async (t) => {
 
 test('a symlink is rejected by type even when it points INSIDE the pack', async (t) => {
   const dir = pack(t);
-  symlinkSync(join(dir, 'theme.yaml'), join(dir, 'sprites', 'solo', 'inner-link'));
+  symlinkSync(join(dir, 'theme.yaml'), join(dir, 'sprites', 'pip', 'inner-link'));
   await rejects(dir, /inner-link.*symlink/);
 });
 
@@ -76,14 +76,14 @@ test('a symlinked descriptor rejects', async (t) => {
 test('a unix socket is rejected by type', async (t) => {
   const dir = pack(t);
   const server = createServer();
-  await new Promise((ok) => server.listen(join(dir, 'sprites', 'solo', 'sock'), ok));
+  await new Promise((ok) => server.listen(join(dir, 'sprites', 'pip', 'sock'), ok));
   t.after(() => server.close());
   await rejects(dir, /sock.*(socket|not a regular file)/);
 });
 
 test('a FIFO is rejected by type, not opened (child process, hard timeout)', (t) => {
   const dir = pack(t);
-  execFileSync('mkfifo', [join(dir, 'sprites', 'solo', 'trap')]);
+  execFileSync('mkfifo', [join(dir, 'sprites', 'pip', 'trap')]);
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', `
     import { validateThemePack } from 'familiar-theme';
     try { await validateThemePack(${JSON.stringify(dir)}); console.log('ACCEPTED'); }
@@ -95,11 +95,11 @@ test('a FIFO is rejected by type, not opened (child process, hard timeout)', (t)
 
 test('an empty-directory tree breaches MAX_ENTRY_COUNT; at the limit it passes', async (t) => {
   const at = pack(t);
-  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9; i++) mkdirSync(join(at, 'sprites', 'solo', `d${i}`));
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9; i++) mkdirSync(join(at, 'sprites', 'pip', `d${i}`));
   await validateThemePack(at);
 
   const over = pack(t);
-  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9 + 1; i++) mkdirSync(join(over, 'sprites', 'solo', `d${i}`));
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9 + 1; i++) mkdirSync(join(over, 'sprites', 'pip', `d${i}`));
   await rejects(over, /MAX_ENTRY_COUNT|entries/);
 });
 
@@ -116,7 +116,7 @@ test('MAX_TOTAL_BYTES: sparse filler at the limit passes, one byte over fails', 
     return total;
   };
   const fill = (dir, target) => {
-    const fd = openSync(join(dir, 'sprites', 'solo', 'filler.bin'), 'w');
+    const fd = openSync(join(dir, 'sprites', 'pip', 'filler.bin'), 'w');
     ftruncateSync(fd, target - sizeOf(dir));
     closeSync(fd);
   };
@@ -132,11 +132,11 @@ test('MAX_TOTAL_BYTES: sparse filler at the limit passes, one byte over fails', 
 test('a Git LFS pointer rejects wherever it sits, with the materialized-files message', async (t) => {
   const POINTER = 'version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 12\n';
   const asAsset = pack(t);
-  writeFileSync(join(asAsset, 'sprites', 'solo', 'idle.png'), POINTER);
-  await rejects(asAsset, /sprites\/solo\/idle\.png is a Git LFS pointer; v1 themes must contain materialized files/);
+  writeFileSync(join(asAsset, 'sprites', 'pip', 'idle.png'), POINTER);
+  await rejects(asAsset, /sprites\/pip\/idle\.png is a Git LFS pointer; v1 themes must contain materialized files/);
 
   const asData = pack(t);
-  writeFileSync(join(asData, 'sprites', 'solo', 'provenance.json'), POINTER);
+  writeFileSync(join(asData, 'sprites', 'pip', 'provenance.json'), POINTER);
   await rejects(asData, /provenance\.json is a Git LFS pointer/);
 });
 
@@ -150,14 +150,14 @@ test('an oversized descriptor rejects before parsing; at the limit it parses', a
 
 test('an oversized animation.yaml rejects at preflight', async (t) => {
   const dir = pack(t);
-  writeFileSync(join(dir, 'sprites', 'solo', 'animation.yaml'),
+  writeFileSync(join(dir, 'sprites', 'pip', 'animation.yaml'),
     `# ${'x'.repeat(LIMITS.MAX_DESCRIPTOR_BYTES)}\n`);
   await rejects(dir, /animation\.yaml is \d+ bytes|animation\.yaml.*MAX_DESCRIPTOR_BYTES/);
 });
 
 test('an oversized PNG rejects at lstat, before any bytes are read', async (t) => {
   const dir = pack(t);
-  const fd = openSync(join(dir, 'sprites', 'solo', 'big.png'), 'w');
+  const fd = openSync(join(dir, 'sprites', 'pip', 'big.png'), 'w');
   ftruncateSync(fd, LIMITS.MAX_ASSET_BYTES + 1);
   closeSync(fd);
   await rejects(dir, /big\.png.*MAX_ASSET_BYTES|big\.png is \d+ bytes/);
@@ -165,10 +165,10 @@ test('an oversized PNG rejects at lstat, before any bytes are read', async (t) =
 
 test('whole-pack strict: a fault loadThemePack tolerates, the gate throws', async (t) => {
   const dir = pack(t);
-  rmSync(join(dir, 'sprites', 'solo'), { recursive: true });
+  rmSync(join(dir, 'sprites', 'pip'), { recursive: true });
   const real = realpathSync(dir);
   await assert.rejects(() => validateThemePack(dir), (e) => {
-    assert.match(e.message, /asset-root "sprites\/solo" does not exist/);
+    assert.match(e.message, /asset-root "sprites\/pip" does not exist/);
     assert.ok(!e.message.includes(real), 'assetRootFault leaked the absolute pack root');
     return true;
   });
@@ -177,7 +177,7 @@ test('whole-pack strict: a fault loadThemePack tolerates, the gate throws', asyn
 test('a candidate descriptorPath replaces theme.yaml: parsed, counted once, live one not counted', async (t) => {
   const dir = pack(t);
   writeFileSync(join(dir, '.theme.yaml.candidate'), CANDIDATE_DESCRIPTOR);
-  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9; i++) mkdirSync(join(dir, 'sprites', 'solo', `d${i}`));
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9; i++) mkdirSync(join(dir, 'sprites', 'pip', `d${i}`));
   const p = await validateThemePack(dir, { descriptorPath: join(dir, '.theme.yaml.candidate') });
   assert.equal(p.id, 'candidate-fixture');
 });
@@ -217,7 +217,7 @@ test('a candidate beneath a nonexistent external parent rejects pack-relatively'
 test('a pack at EXACTLY both limits validates through the candidate seam', async (t) => {
   const dir = pack(t);
   writeFileSync(join(dir, '.theme.yaml.candidate'), DESCRIPTOR);
-  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9 - 1; i++) mkdirSync(join(dir, 'sprites', 'solo', `d${i}`));
+  for (let i = 0; i < LIMITS.MAX_ENTRY_COUNT - 9 - 1; i++) mkdirSync(join(dir, 'sprites', 'pip', `d${i}`));
   const logicalBytes = () => {
     let total = 0;
     const walk = (d) => {
@@ -231,11 +231,11 @@ test('a pack at EXACTLY both limits validates through the candidate seam', async
     walk(dir);
     return total + statSync(join(dir, '.theme.yaml.candidate')).size;
   };
-  const fd = openSync(join(dir, 'sprites', 'solo', 'filler.bin'), 'w');
+  const fd = openSync(join(dir, 'sprites', 'pip', 'filler.bin'), 'w');
   ftruncateSync(fd, 0);
   closeSync(fd);
   const pad = LIMITS.MAX_TOTAL_BYTES - logicalBytes();
-  const fd2 = openSync(join(dir, 'sprites', 'solo', 'filler.bin'), 'w');
+  const fd2 = openSync(join(dir, 'sprites', 'pip', 'filler.bin'), 'w');
   ftruncateSync(fd2, pad);
   closeSync(fd2);
   const p = await validateThemePack(dir, { descriptorPath: join(dir, '.theme.yaml.candidate') });

@@ -10,7 +10,9 @@ import {
 } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parse } from 'yaml';
-import { assertSlot, SLOT_COUNT } from '../protocol/slots.js';
+import { LIMITS } from '../limits.js';
+import { assertLocale, LOCALES } from '../protocol/locale.js';
+import { DEFAULT_ROLE } from '../protocol/role.js';
 import { STATES } from '../protocol/state.js';
 
 // EVERY id in a theme pack that enters a live path join is validated by this one
@@ -65,7 +67,7 @@ export const DEFAULT_ROWS = 12;
 //
 // UNRELATED to this package's npm version and to animation.yaml's version.
 // None of the three versions the others.
-export const SPEC_VERSION = 1;
+export const SPEC_VERSION = 2;
 
 // 0 rows is an invisible cat; 40 is a screenful. Both are mistakes, and neither is one the
 // renderer can detect — it just draws what it is told.
@@ -82,8 +84,10 @@ const shown = (value) => (typeof value === 'string' ? JSON.stringify(value) : St
 // CLOSED, at every level. An ignored key is a silent mistake: a misspelled
 // `presona:` used to surface as "missing persona", which points the author at
 // the wrong line entirely, and a key from a future spec-version passed unread.
-const THEME_KEYS = new Set(['spec-version', 'id', 'label', 'description', 'rows', 'members']);
-const MEMBER_KEYS = new Set(['id', 'asset-root', 'label', 'slots', 'persona', 'animation', 'poses', 'anchor']);
+const THEME_KEYS = new Set(['spec-version', 'id', 'label', 'description', 'rows', 'members', 'world']);
+const MEMBER_KEYS = new Set(['id', 'asset-root', 'label', 'roles', 'persona', 'animation', 'poses', 'anchor']);
+const WORLD_KEYS = new Set(['asset-root', 'size', 'locales']);
+const LOCALE_KEYS = new Set(['image', 'places']);
 
 function assertClosed(object, allowed, what) {
   for (const key of Object.keys(object)) {
@@ -139,33 +143,20 @@ function parseAnchor(raw, themeId, memberId) {
   return raw;
 }
 
-// A member holds one or more slots. Coverage is checked at the pack level, not
-// here: one member covering all twelve is legal, and so is twelve members
-// holding one each. What is never legal is a slot no member holds -- that is a
-// project that resolves to nothing, and it used to surface at RESOLUTION time
-// from defaultMemberForSlot rather than at parse time.
-function parseSlots(raw, themeId, memberId) {
+// A member holds zero or more roles. An empty list is legal: that member is reachable
+// only by a pin, which is how a cast migrates without inventing roles. Who holds what
+// across the pack -- one holder per role, exactly one `default` -- is checked at the
+// pack level, after every member has parsed.
+function parseRoles(raw, themeId, memberId) {
+  const context = `theme "${themeId}": member "${memberId}"`;
   if (!Array.isArray(raw)) {
-    throw new Error(
-      `theme "${themeId}": member "${memberId}": slots must be an array (found ${shown(raw)})`
-    );
-  }
-  if (raw.length === 0) {
-    throw new Error(
-      `theme "${themeId}": member "${memberId}": slots is empty — a member holds at least one slot`
-    );
+    throw new Error(`${context}: roles must be an array of role ids (found ${shown(raw)})`);
   }
   const seen = new Set();
-  for (const slot of raw) {
-    try {
-      assertSlot(slot);
-    } catch (err) {
-      throw new Error(`theme "${themeId}": member "${memberId}": ${err.message}`);
-    }
-    if (seen.has(slot)) {
-      throw new Error(`theme "${themeId}": member "${memberId}": slots repeats ${slot}`);
-    }
-    seen.add(slot);
+  for (const role of raw) {
+    assertId(role, `${context}: role`, 'reviewer');
+    if (seen.has(role)) throw new Error(`${context}: roles repeats ${role}`);
+    seen.add(role);
   }
   return [...raw];
 }
@@ -183,8 +174,10 @@ function parseAnimation(raw, themeId, memberId) {
   return Object.freeze({ kind: raw.kind });
 }
 
-function parseAssetRoot(raw, themeId, memberId, themeDir) {
-  const context = `theme "${themeId}": member "${memberId}": asset-root`;
+// The lexical rule for every author-supplied path in a descriptor (a member's
+// asset-root, the world's asset-root, a locale image): relative, `/`-separated, no
+// empty, "." or ".." segment. Returns the segments.
+function parseRelativePath(raw, context) {
   if (raw === undefined) throw new Error(`${context} is missing`);
   if (typeof raw !== 'string' || raw === '') {
     throw new Error(`${context} must be a nonempty relative serialized / path`);
@@ -196,6 +189,12 @@ function parseAssetRoot(raw, themeId, memberId, themeDir) {
   if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
     throw new Error(`${context} "${raw}" cannot contain empty, "." or ".." segments`);
   }
+  return segments;
+}
+
+function parseAssetRoot(raw, themeId, memberId, themeDir) {
+  const context = `theme "${themeId}": member "${memberId}": asset-root`;
+  const segments = parseRelativePath(raw, context);
   if (segments.length < 2
       || segments.at(-2) !== 'sprites'
       || segments.at(-1) !== memberId) {
@@ -207,6 +206,103 @@ function parseAssetRoot(raw, themeId, memberId, themeDir) {
     assetDir: resolve(themeDir, ...segments),
     assetDirProof: 'lexical',
   };
+}
+
+const isMap = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+const isPair = (value) => Array.isArray(value) && value.length === 2 && value.every(Number.isInteger);
+
+// A world root that is, contains or lies inside a member's root would install the
+// world over that member's art (or the member's art over the world). Compared by
+// segment, never by string prefix: `sprites-world` shares a prefix with `sprites/pip`
+// and touches nothing.
+function assertWorldClearOfMembers(context, root, members) {
+  for (const member of members.values()) {
+    const memberSegments = member.assetRoot.split('/');
+    const shared = Math.min(root.length, memberSegments.length);
+    if (!root.slice(0, shared).every((segment, i) => segment === memberSegments[i])) continue;
+    const at = `${context} "${root.join('/')}"`;
+    const theirs = `member "${member.id}"'s asset-root`;
+    if (root.length === memberSegments.length) {
+      throw new Error(`${at} lies on ${theirs} — it is that asset-root`);
+    }
+    if (root.length < memberSegments.length) {
+      throw new Error(`${at} lies on ${theirs} "${member.assetRoot}" — it contains ${theirs}`);
+    }
+    throw new Error(`${at} lies inside ${theirs} "${member.assetRoot}"`);
+  }
+}
+
+function parsePlaces(raw, context, size) {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new Error(`${context}: places must list at least one place (found ${JSON.stringify(raw)})`);
+  }
+  return raw.map((place, index) => {
+    if (!isPair(place)) {
+      throw new Error(
+        `${context}: place ${index} must be [x, y], two whole numbers (found ${JSON.stringify(place)})`,
+      );
+    }
+    const [x, y] = place;
+    if (x < 0 || x >= size.width || y < 0 || y >= size.height) {
+      throw new Error(
+        `${context}: place ${index} [${x}, ${y}] is outside size ${size.width}x${size.height}`,
+      );
+    }
+    return { x, y };
+  });
+}
+
+// OPTIONAL: a pack without `world:` is a cast on a plain backdrop. When present, one
+// size for every locale (locales swap in place without the scene jumping), `home`
+// required, every other locale optional, and every path lexically confined under the
+// world's own asset-root. Filesystem proof is the loader's and the gate's job, as it
+// is for members.
+function parseWorld(raw, themeId, themeDir, members) {
+  if (raw === undefined) return null;
+  const context = `theme "${themeId}": world`;
+  if (!isMap(raw)) throw new Error(`${context} must be a map (found ${shown(raw)})`);
+  assertClosed(raw, WORLD_KEYS, context);
+
+  const segments = parseRelativePath(raw['asset-root'], `${context}: asset-root`);
+  for (const segment of segments) assertId(segment, `${context}: asset-root segment`, 'world');
+  assertWorldClearOfMembers(`${context}: asset-root`, segments, members);
+  const assetRoot = segments.join('/');
+  const assetDir = resolve(themeDir, ...segments);
+
+  const rawSize = raw.size;
+  if (!isPair(rawSize) || rawSize[0] < 1 || rawSize[1] < 1) {
+    throw new Error(
+      `${context}: size must be [width, height], two positive whole numbers (found ${JSON.stringify(rawSize)})`,
+    );
+  }
+  const size = { width: rawSize[0], height: rawSize[1] };
+
+  if (!isMap(raw.locales)) {
+    throw new Error(`${context}: locales must be a map of locale names (found ${shown(raw.locales)})`);
+  }
+  assertClosed(raw.locales, new Set(LOCALES), `${context}: locales`);
+  if (!('home' in raw.locales)) throw new Error(`${context}: locale "home" is required`);
+
+  const locales = new Map();
+  for (const name of LOCALES) {
+    if (!(name in raw.locales)) continue;
+    const localeContext = `${context}: locales: ${name}`;
+    const locale = raw.locales[name];
+    if (!isMap(locale)) throw new Error(`${localeContext} must be a map (found ${shown(locale)})`);
+    assertClosed(locale, LOCALE_KEYS, localeContext);
+    const imageSegments = parseRelativePath(locale.image, `${localeContext}: image`);
+    if (!locale.image.endsWith('.png')) {
+      throw new Error(`${localeContext}: image "${locale.image}" must end in .png`);
+    }
+    const image = imageSegments.join('/');
+    locales.set(name, {
+      image,
+      imagePath: resolve(assetDir, ...imageSegments),
+      places: parsePlaces(locale.places, localeContext, size),
+    });
+  }
+
+  return { assetRoot, assetDir, assetDirProof: 'lexical', size, locales };
 }
 
 // Validation is strict and fails early. A half-populated theme must never fall
@@ -230,7 +326,11 @@ export function parseThemePack(text, dir, { descriptorLabel = `${dir}/theme.yaml
   if (specVersion !== SPEC_VERSION) {
     throw new Error(
       `${descriptorLabel}: spec-version ${specVersion} is not supported — ` +
-      `this build understands spec-version ${SPEC_VERSION}`
+      `this build understands spec-version ${SPEC_VERSION}` +
+      (specVersion === 1
+        ? ' — it replaced member "slots" with "roles" (exactly one member holds ' +
+          `"${DEFAULT_ROLE}") and added an optional world`
+        : '')
     );
   }
   assertClosed(data, THEME_KEYS, descriptorLabel);
@@ -259,6 +359,13 @@ export function parseThemePack(text, dir, { descriptorLabel = `${dir}/theme.yaml
   if (!Array.isArray(data.members) || data.members.length === 0) {
     throw new Error(`theme "${data.id}": has no members`);
   }
+  // By count, before any member parses: the bound is on what an untrusted pack may ask
+  // the parser (and later the gate) to walk.
+  if (data.members.length > LIMITS.MAX_MEMBERS) {
+    throw new Error(
+      `theme "${data.id}": ${data.members.length} members — the bound is ${LIMITS.MAX_MEMBERS} (MAX_MEMBERS)`
+    );
+  }
 
   // THEME-LEVEL: one height for the theme. A member whose `working` needs a different
   // height has drifted from the shared archetype — a thing to SEE (redraw the pose),
@@ -266,7 +373,6 @@ export function parseThemePack(text, dir, { descriptorLabel = `${dir}/theme.yaml
   const rows = parseRows(data.rows, data.id);
 
   const members = new Map();
-  const bySlot = new Map();
 
   for (const [index, raw] of data.members.entries()) {
     if (raw === null || typeof raw !== 'object') {
@@ -279,14 +385,15 @@ export function parseThemePack(text, dir, { descriptorLabel = `${dir}/theme.yaml
     if (typeof raw.label !== 'string' || raw.label === '') {
       throw new Error(`theme "${data.id}": member "${raw.id}" is missing label`);
     }
-    if ('slot' in raw) {
+    if ('slots' in raw) {
       throw new Error(
-        `theme "${data.id}": member "${raw.id}": "slot" was replaced by "slots" in ` +
-        `spec-version ${SPEC_VERSION} — write: slots: [${shown(raw.slot)}]`
+        `theme "${data.id}": member "${raw.id}": "slots" was replaced by "roles" in ` +
+        `spec-version ${SPEC_VERSION} — write roles: [...], a list of role ids (possibly empty); ` +
+        `exactly one member holds "${DEFAULT_ROLE}"`
       );
     }
     assertClosed(raw, MEMBER_KEYS, `theme "${data.id}": member "${raw.id}"`);
-    const slots = parseSlots(raw.slots, data.id, raw.id);
+    const roles = parseRoles(raw.roles, data.id, raw.id);
     if (typeof raw.persona !== 'string' || raw.persona.trim() === '') {
       throw new Error(`theme "${data.id}": member "${raw.id}" is missing persona`);
     }
@@ -312,37 +419,38 @@ export function parseThemePack(text, dir, { descriptorLabel = `${dir}/theme.yaml
     members.set(raw.id, {
       id: raw.id,
       label: raw.label,
-      slots,
+      roles,
       persona: raw.persona.trim(),
       ...asset,
       animation: parseAnimation(raw.animation, data.id, raw.id),
       anchor: parseAnchor(raw.anchor, data.id, raw.id),
       poses: Object.fromEntries(STATES.map((s) => [s, poses[s].trim()])),
     });
+  }
 
-    // Order is significant: the first member declared for a slot is its default.
-    for (const slot of slots) {
-      if (!bySlot.has(slot)) bySlot.set(slot, []);
-      bySlot.get(slot).push(raw.id);
+  // One holder per role, so the resolver never chooses; `default` is a role like any
+  // other here, which makes two `default` holders the same error as two planners.
+  const byRole = new Map();
+  for (const member of members.values()) {
+    for (const role of member.roles) {
+      if (byRole.has(role)) {
+        throw new Error(
+          `theme "${data.id}": role "${role}" is held by both "${byRole.get(role)}" and "${member.id}"`
+        );
+      }
+      byRole.set(role, member.id);
     }
   }
-
-  // Every slot needs a member. autoSlot hashes a project to ANY of the twelve,
-  // so an uncovered slot is a project that resolves to nothing -- and it used to
-  // fail at resolution time, far from the theme that caused it.
-  const uncovered = [];
-  for (let slot = 0; slot < SLOT_COUNT; slot += 1) {
-    if (!bySlot.has(slot)) uncovered.push(slot);
-  }
-  if (uncovered.length > 0) {
+  if (!byRole.has(DEFAULT_ROLE)) {
     throw new Error(
-      `theme "${data.id}": no member holds ` +
-      `${uncovered.length === 1 ? `slot ${uncovered[0]}` : `slots ${uncovered.join(', ')}`} — ` +
-      `all ${SLOT_COUNT} slots need a member, because any project can hash to any slot`
+      `theme "${data.id}": no member holds the role "${DEFAULT_ROLE}" — exactly one must, ` +
+      'because it is the member for an agent with no role or a role the pack does not cover'
     );
   }
 
-  return { specVersion, id: data.id, label: data.label, description, dir, rows, members, bySlot };
+  const world = parseWorld(data.world, data.id, dir, members);
+
+  return { specVersion, id: data.id, label: data.label, description, dir, rows, members, byRole, world };
 }
 
 function assertDescriptor(themeRealDir, descriptorPath, descriptorRealPath, descriptorStat) {
@@ -451,12 +559,23 @@ export function loadThemePackSync(themeDir, {
   return replaceMembers(pack, members);
 }
 
-export function defaultMemberForSlot(pack, slot) {
-  const ids = pack.bySlot.get(assertSlot(slot));
-  if (!ids || ids.length === 0) {
-    throw new Error(`theme "${pack.id}" has no member for slot ${slot}`);
-  }
-  return ids[0];
+// null, not the default: whether an uncovered role falls back to `default` is the
+// caller's decision to make visibly, not this lookup's to make silently.
+export function memberForRole(pack, role) {
+  assertId(role, 'role', 'reviewer');
+  return pack.byRole.get(role) ?? null;
+}
+
+export function defaultMember(pack) {
+  return pack.byRole.get(DEFAULT_ROLE);
+}
+
+export function localeOrThrow(pack, name) {
+  assertLocale(name);
+  if (pack.world === null) throw new Error(`theme "${pack.id}" has no world`);
+  const locale = pack.world.locales.get(name);
+  if (!locale) throw new Error(`theme "${pack.id}" has no locale "${name}"`);
+  return locale;
 }
 
 export function memberOrThrow(pack, memberId) {

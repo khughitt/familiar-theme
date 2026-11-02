@@ -7,16 +7,16 @@ import { CLIP_ROLES, encodeRgba, ROLE_SPEC, STATES } from 'familiar-theme';
 
 export const TINY_PNG = () => encodeRgba({ w: 1, h: 1, buf: new Uint8Array([0, 0, 0, 255]) });
 
-// The smallest legal v1 pack: one member holding all twelve slots, six 1x1 states.
-export const DESCRIPTOR = `spec-version: 1
+// The smallest legal v2 pack: one member holding the default role, six 1x1 states.
+export const DESCRIPTOR = `spec-version: 2
 id: gate-fixture
 label: Gate Fixture
 members:
-  - id: solo
-    label: Solo
-    slots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  - id: pip
+    label: Pip
+    roles: [default]
     persona: test fixture
-    asset-root: sprites/solo
+    asset-root: sprites/pip
     animation:
       kind: static
     poses:
@@ -30,7 +30,7 @@ members:
 
 export function writePack({ descriptor = DESCRIPTOR } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'theme-gate-'));
-  const memberDir = join(dir, 'sprites', 'solo');
+  const memberDir = join(dir, 'sprites', 'pip');
   mkdirSync(memberDir, { recursive: true });
   for (const state of STATES) writeFileSync(join(memberDir, `${state}.png`), TINY_PNG());
   writeFileSync(join(dir, 'theme.yaml'), descriptor);
@@ -57,7 +57,7 @@ export function clipsManifest(rootBytes) {
 export function writeClipsPack({ manifest, frameBytes } = {}) {
   const rootBytes = TINY_PNG();
   const dir = writePack({ descriptor: DESCRIPTOR.replace('kind: static', 'kind: clips') });
-  const memberDir = join(dir, 'sprites', 'solo');
+  const memberDir = join(dir, 'sprites', 'pip');
   writeFileSync(join(memberDir, 'animation.yaml'), stringify(manifest ?? clipsManifest(rootBytes)));
   for (const role of CLIP_ROLES) {
     mkdirSync(join(memberDir, 'animation', role), { recursive: true });

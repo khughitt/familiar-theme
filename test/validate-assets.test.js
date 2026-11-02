@@ -35,23 +35,23 @@ const headerOnlyPng = (w, h) => {
 
 test('an invalid UNDECLARED source.png rejects — every PNG in the pack validates', async (t) => {
   const dir = pack(t);
-  writeFileSync(join(dir, 'sprites', 'solo', 'source.png'), Buffer.from('not a png'));
-  await rejects(dir, /sprites\/solo\/source\.png.*not a PNG/);
+  writeFileSync(join(dir, 'sprites', 'pip', 'source.png'), Buffer.from('not a png'));
+  await rejects(dir, /sprites\/pip\/source\.png.*not a PNG/);
 });
 
 test('CRC-valid-but-corrupt IDAT passes structure and fails decode, naming the file', async (t) => {
   const dir = pack(t);
-  writeFileSync(join(dir, 'sprites', 'solo', 'noise.png'), headerOnlyPng(1, 1));
-  await rejects(dir, /sprites\/solo\/noise\.png.*(does not inflate|corrupt)/);
+  writeFileSync(join(dir, 'sprites', 'pip', 'noise.png'), headerOnlyPng(1, 1));
+  await rejects(dir, /sprites\/pip\/noise\.png.*(does not inflate|corrupt)/);
 });
 
 test('dimension caps fail from the header, before any inflate', async (t) => {
   const overSide = pack(t);
-  writeFileSync(join(overSide, 'sprites', 'solo', 'wide.png'), headerOnlyPng(LIMITS.MAX_ASSET_SIDE + 1, 1));
+  writeFileSync(join(overSide, 'sprites', 'pip', 'wide.png'), headerOnlyPng(LIMITS.MAX_ASSET_SIDE + 1, 1));
   await rejects(overSide, /wide\.png.*MAX_ASSET_SIDE|wide\.png is \d+ px/);
 
   const overPixels = pack(t);
-  writeFileSync(join(overPixels, 'sprites', 'solo', 'tall.png'), headerOnlyPng(4096, 2049));
+  writeFileSync(join(overPixels, 'sprites', 'pip', 'tall.png'), headerOnlyPng(4096, 2049));
   await rejects(overPixels, /tall\.png.*MAX_ASSET_PIXELS|pixels/);
 });
 
@@ -59,7 +59,7 @@ test('at the dimension limits, a real asset decodes clean', async (t) => {
   const dir = pack(t);
   // 4096 x 2048 = exactly MAX_ASSET_PIXELS; side exactly MAX_ASSET_SIDE.
   const w = LIMITS.MAX_ASSET_SIDE, h = LIMITS.MAX_ASSET_PIXELS / LIMITS.MAX_ASSET_SIDE;
-  writeFileSync(join(dir, 'sprites', 'solo', 'max.png'),
+  writeFileSync(join(dir, 'sprites', 'pip', 'max.png'),
     encodeRgba({ w, h, buf: new Uint8Array(w * h * 4) }));
   await validateThemePack(dir);
 });
@@ -70,7 +70,7 @@ test('MAX_DECODED_TOTAL trips from accounting BEFORE any IDAT reaches zlib', asy
   // IDAT. If decode ran first the error would be an inflate error; it must be
   // the accounting error.
   for (let i = 0; i < 33; i++) {
-    writeFileSync(join(dir, 'sprites', 'solo', `promise-${String(i).padStart(2, '0')}.png`),
+    writeFileSync(join(dir, 'sprites', 'pip', `promise-${String(i).padStart(2, '0')}.png`),
       headerOnlyPng(4096, 2048));
   }
   await rejects(dir, /MAX_DECODED_TOTAL/);
@@ -83,8 +83,8 @@ test('the accounting comparison: exact limit passes, smallest representable exce
 
 test('a missing declared state rejects with the state named', async (t) => {
   const dir = pack(t);
-  rmSync(join(dir, 'sprites', 'solo', 'working.png'));
-  await rejects(dir, /solo.*working/);
+  rmSync(join(dir, 'sprites', 'pip', 'working.png'));
+  await rejects(dir, /pip.*working/);
 });
 
 test('.light.png: absent passes; present-but-malformed rejects', async (t) => {
@@ -92,7 +92,7 @@ test('.light.png: absent passes; present-but-malformed rejects', async (t) => {
   await validateThemePack(ok);
 
   const bad = pack(t);
-  writeFileSync(join(bad, 'sprites', 'solo', 'idle.light.png'), Buffer.from('junk'));
+  writeFileSync(join(bad, 'sprites', 'pip', 'idle.light.png'), Buffer.from('junk'));
   await rejects(bad, /idle\.light\.png.*not a PNG/);
 });
 
@@ -107,6 +107,6 @@ test('at MAX_ASSET_BYTES exactly, a padded valid PNG passes', async (t) => {
     base.subarray(base.length - 12),
   ]);
   assert.equal(padded.length, LIMITS.MAX_ASSET_BYTES);
-  writeFileSync(join(dir, 'sprites', 'solo', 'fat.png'), padded);
+  writeFileSync(join(dir, 'sprites', 'pip', 'fat.png'), padded);
   await validateThemePack(dir);
 });

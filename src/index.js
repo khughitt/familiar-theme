@@ -4,7 +4,7 @@
 //
 export {
   parseThemePack, loadThemePack, loadThemePackSync,
-  defaultMemberForSlot, memberOrThrow, memberAssetDir,
+  memberForRole, defaultMember, localeOrThrow, memberOrThrow, memberAssetDir,
   assertId, ID_RE, ROW_MIN, ROW_MAX, DEFAULT_ROWS, SPEC_VERSION,
 } from './theme/pack.js';
 export { CLIP_ROLES, ROLE_SPEC, loadAnimationMember, loadAnimationRefSync } from './theme/animation.js';
@@ -13,7 +13,6 @@ export { packEntryRole } from './theme/content.js';
 export { STATES, assertState } from './protocol/state.js';
 export { LOCALES, assertLocale } from './protocol/locale.js';
 export { DEFAULT_ROLE } from './protocol/role.js';
-export { SLOT_COUNT, assertSlot } from './protocol/slots.js';
 export { crc32, pngSize, decodeRgba, encodeRgba } from './png.js';
 export { LIMITS } from './limits.js';
 export { validateThemePack } from './validate.js';

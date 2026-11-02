@@ -22,27 +22,27 @@ const proven = (t) => {
 
 test('assetsFor rejects a symlinked state sprite', (t) => {
   const pack = proven(t);
-  const memberDir = pack.members.get('solo').assetDir;
+  const memberDir = pack.members.get('pip').assetDir;
   const real = join(memberDir, 'idle.png');
   rmSync(real);
   symlinkSync(join(memberDir, 'working.png'), real);
-  assert.throws(() => assetsFor(pack, 'solo', 'dark'), /idle\.png.*symlink|regular/);
+  assert.throws(() => assetsFor(pack, 'pip', 'dark'), /idle\.png.*symlink|regular/);
 });
 
 test('.light.png: ENOENT falls back to the base asset; a symlinked light REJECTS', (t) => {
   const pack = proven(t);
-  const memberDir = pack.members.get('solo').assetDir;
-  const assets = assetsFor(pack, 'solo', 'light');
+  const memberDir = pack.members.get('pip').assetDir;
+  const assets = assetsFor(pack, 'pip', 'light');
   assert.equal(assets.idle.terminal, join(memberDir, 'idle.png'));
   symlinkSync(join(memberDir, 'idle.png'), join(memberDir, 'idle.light.png'));
-  assert.throws(() => assetsFor(pack, 'solo', 'light'), /idle\.light\.png.*symlink|regular/);
+  assert.throws(() => assetsFor(pack, 'pip', 'light'), /idle\.light\.png.*symlink|regular/);
 });
 
 test('an lstat failure that is NOT ENOENT rejects instead of selecting the base', (t) => {
   const pack = proven(t);
   const boom = () => { const e = new Error('EACCES'); e.code = 'EACCES'; throw e; };
   assert.throws(
-    () => assetsFor(pack, 'solo', 'light', { lstat: boom, realpath: (p) => p }),
+    () => assetsFor(pack, 'pip', 'light', { lstat: boom, realpath: (p) => p }),
     /EACCES/,
   );
 });
@@ -53,7 +53,7 @@ test('a sprite hard-swapped for a path outside the member dir rejects on contain
   t.after(() => rmSync(outside, { recursive: true, force: true }));
   writeFileSync(join(outside, 'idle.png'), Buffer.from([1]));
   const escaping = { realpath: () => join(outside, 'idle.png') };
-  assert.throws(() => assetsFor(pack, 'solo', 'dark', escaping), /resolves outside|contain/);
+  assert.throws(() => assetsFor(pack, 'pip', 'dark', escaping), /resolves outside|contain/);
 });
 
 const clipsProven = (t) => {
@@ -68,19 +68,19 @@ const swapForSymlink = (path) => {
 
 test('loadAnimationMember rejects a symlinked animation.yaml before reading it', async (t) => {
   const { dir, pack } = clipsProven(t);
-  swapForSymlink(join(dir, 'sprites', 'solo', 'animation.yaml'));
-  await assert.rejects(() => loadAnimationMember(pack, 'solo'), /animation\.yaml.*(symlink|regular)/);
+  swapForSymlink(join(dir, 'sprites', 'pip', 'animation.yaml'));
+  await assert.rejects(() => loadAnimationMember(pack, 'pip'), /animation\.yaml.*(symlink|regular)/);
 });
 
 test('loadAnimationMember rejects a symlinked frame before reading it', async (t) => {
   const { dir, pack } = clipsProven(t);
-  swapForSymlink(join(dir, 'sprites', 'solo', 'animation', CLIP_ROLES[0], 'f01.png'));
-  await assert.rejects(() => loadAnimationMember(pack, 'solo'), /f01\.png.*(symlink|regular)/);
+  swapForSymlink(join(dir, 'sprites', 'pip', 'animation', CLIP_ROLES[0], 'f01.png'));
+  await assert.rejects(() => loadAnimationMember(pack, 'pip'), /f01\.png.*(symlink|regular)/);
 });
 
 test('loadAnimationRefSync rejects a manifest that became a symlink after the ref was built', async (t) => {
   const { dir, pack } = clipsProven(t);
-  const { ref } = await loadAnimationMember(pack, 'solo');
-  swapForSymlink(join(dir, 'sprites', 'solo', 'animation.yaml'));
+  const { ref } = await loadAnimationMember(pack, 'pip');
+  swapForSymlink(join(dir, 'sprites', 'pip', 'animation.yaml'));
   assert.throws(() => loadAnimationRefSync(ref), /(symlink|regular)/);
 });

@@ -53,8 +53,8 @@ test('an ancestor of an asset-root must be a real directory', async (t) => {
 
 test('a symlink inside a member tree still fails by path', async (t) => {
   const dir = pack(t);
-  symlinkSync('/etc/passwd', join(dir, 'sprites', 'solo', 'evil.txt'));
-  await assert.rejects(() => validateThemePack(dir), /sprites\/solo\/evil\.txt: is a symlink/);
+  symlinkSync('/etc/passwd', join(dir, 'sprites', 'pip', 'evil.txt'));
+  await assert.rejects(() => validateThemePack(dir), /sprites\/pip\/evil\.txt: is a symlink/);
 });
 
 test('licence directories are walked at every depth', async (t) => {
@@ -101,9 +101,9 @@ test('the descriptor is read once: a rewrite through an outside alias is never s
     afterDescriptorRead() {
       reads += 1;
       writeFileSync(join(dir, 'theme.yaml'),
-        DESCRIPTOR.replace('asset-root: sprites/solo', 'asset-root: alias/sprites/solo'));
+        DESCRIPTOR.replace('asset-root: sprites/pip', 'asset-root: alias/sprites/pip'));
     },
   });
   assert.equal(reads, 1);
-  assert.equal(p.members.get('solo').assetRoot, 'sprites/solo');
+  assert.equal(p.members.get('pip').assetRoot, 'sprites/pip');
 });
