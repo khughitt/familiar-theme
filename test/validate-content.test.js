@@ -140,10 +140,10 @@ test('a world pack validates through a symlinked path to the theme directory', a
   assert.equal(p.world.locales.size, 2);
 });
 
-test('a locale image the pack does not hold is refused as not walked', async (t) => {
+test('a locale image the pack does not hold is refused as missing', async (t) => {
   await assert.rejects(
     () => validateThemePack(worldPack(t, { scoped: null })),
-    /world: locale "scoped" image world\/scoped\.png was not walked by the gate/,
+    /world: locale "scoped" is missing its image world\/scoped\.png/,
   );
 });
 

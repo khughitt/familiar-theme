@@ -239,7 +239,7 @@ async function validateResolved(root, candidatePath, loadAnimation, { afterDescr
       const bytes = retained.get(locale.imagePath);
       if (!bytes) {
         throw new Error(
-          `world: locale "${name}" image ${relative(root, locale.imagePath)} was not walked by the gate`,
+          `world: locale "${name}" is missing its image ${relative(root, locale.imagePath)}`,
         );
       }
       const size = pngSize(bytes);
