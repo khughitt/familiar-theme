@@ -1,9 +1,11 @@
 // The gate's exact bounds. "Bounded" is an adjective; these are the contract.
 //
-// PROVENANCE (spec §1). New pack-wide limits derive from themes/cats measured
-// at 2c6f865, times ~4x headroom, rounded up to a legible value. The exact
-// measurement stays beside each constant so a later reader can tell whether a
-// limit is still calibrated. Two constants are PRESERVED, not derived: cats
+// PROVENANCE (spec §1). The per-asset and descriptor limits derive from
+// themes/cats measured at 2c6f865, times ~4x headroom, rounded up to a legible
+// value. The three pack-wide constants (MAX_ENTRY_COUNT, MAX_TOTAL_BYTES,
+// MAX_DECODED_TOTAL) are instead derived from MAX_MEMBERS, as their comments
+// show. The exact measurement stays beside each constant so a later reader can
+// tell whether a limit is still calibrated. Two constants are PRESERVED, not derived: cats
 // ships zero animation, so no animation bound can be measured from it, and
 // re-deriving one would replace a reasoned bound with an artifact of what
 // happens to ship today.
@@ -13,8 +15,10 @@
 export const LIMITS = Object.freeze({
   MAX_MEMBERS: 64,                      // members per pack; chosen, and the base the pack-wide limits below derive from
   // The pack-wide limits below are sized for MAX_MEMBERS members at cats's measured per-member
-  // cost (13 entries, 2,841,695 encoded bytes, 11,572,854 decoded bytes, from the 12-member
-  // measurement) plus one asset per locale (8) at the per-asset ceilings (MAX_ASSET_BYTES
+  // cost (13 entries is the plan's conservative per-member figure: 6 state PNGs plus light
+  // variants and animation entries at cats's shape, where cats measured 110 entries for 12
+  // members, about 9 each; 2,841,695 encoded bytes, 11,572,854 decoded bytes, from the 12-member
+  // measurement) plus one asset per locale (8, the length of LOCALES) at the per-asset ceilings (MAX_ASSET_BYTES
   // encoded, MAX_ASSET_PIXELS * 4 decoded), rounded up to a legible value.
   MAX_ENTRY_COUNT: 1024,                // 64*13 + 8 = 840 entries; rounded up to 1024
   MAX_TOTAL_BYTES: 268_435_456,         // 256 MiB; 64*2,841,695 + 8*8,388,608 = 248,977,344 bytes; rounded up
