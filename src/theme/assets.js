@@ -81,6 +81,14 @@ export function localeAssetFor(pack, name, {
       + 'has not been filesystem-proven by a theme loader',
     );
   }
-  proveRegularFile(locale.imagePath, world.assetDir, { lstat, realpath }, `theme "${pack.id}": world: locale "${name}"`);
+  try {
+    proveRegularFile(locale.imagePath, world.assetDir, { lstat, realpath }, `theme "${pack.id}": world: locale "${name}"`);
+  } catch (cause) {
+    if (cause?.code !== 'ENOENT') throw cause;
+    throw Object.assign(
+      new Error(`theme "${pack.id}": world: locale "${name}" image missing (expected ${locale.imagePath})`, { cause }),
+      { code: 'ENOENT' },
+    );
+  }
   return { image: locale.imagePath, size: world.size, places: locale.places };
 }

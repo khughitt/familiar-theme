@@ -190,7 +190,16 @@ test('localeAssetFor throws when the locale image is a symlink', (t) => {
 test('localeAssetFor throws when the locale image was deleted after load', (t) => {
   const pack = loadThemePackSync(worldPack(t));
   rmSync(join(pack.world.assetDir, 'home.png'));
-  assert.throws(() => localeAssetFor(pack, 'home'), { code: 'ENOENT' });
+  const expected = join(pack.world.assetDir, 'home.png');
+  assert.throws(
+    () => localeAssetFor(pack, 'home'),
+    (error) => {
+      assert.equal(error.message, `theme "${pack.id}": world: locale "home" image missing (expected ${expected})`);
+      assert.equal(error.code, 'ENOENT');
+      assert.equal(error.cause?.code, 'ENOENT');
+      return true;
+    },
+  );
 });
 
 test('localeAssetFor throws when the pack has no world', (t) => {
