@@ -59,3 +59,22 @@ test('a malformed relative path is a named error, not a role', () => {
     assert.throws(() => packEntryRole(pack, rel), /packEntryRole: expected a relative \/ path/);
   }
 });
+
+const WORLD_DESCRIPTOR = `${DESCRIPTOR}world:
+  asset-root: art/world
+  size: [1536, 1024]
+  locales:
+    home:
+      image: home.png
+      places:
+        - [420, 880]
+`;
+
+test('the world asset root is content and its prefixes ancestors', () => {
+  const worldPack = parseThemePack(WORLD_DESCRIPTOR, '/pack');
+  assert.equal(packEntryRole(worldPack, 'art/world'), 'content');
+  assert.equal(packEntryRole(worldPack, 'art/world/home.png'), 'content');
+  assert.equal(packEntryRole(worldPack, 'art'), 'ancestor');
+  assert.equal(packEntryRole(worldPack, 'art/other'), 'outside');
+  assert.equal(packEntryRole(worldPack, 'sprites/pip/idle.png'), 'content');
+});
