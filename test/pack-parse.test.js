@@ -21,8 +21,9 @@ const BARREL_EXPORTS = [
   'CLIP_ROLES', 'DEFAULT_ROLE', 'DEFAULT_ROWS', 'ID_RE', 'LIMITS', 'LOCALES', 'ROLE_SPEC', 'ROW_MAX', 'ROW_MIN',
   'SPEC_VERSION', 'STATES', 'assertId', 'assertLocale', 'assertState',
   'assetsFor', 'crc32', 'decodeRgba', 'defaultMember', 'encodeRgba', 'loadAnimationMember',
-  'loadAnimationRefSync', 'loadThemePack', 'loadThemePackSync', 'localeOrThrow', 'memberAssetDir',
-  'memberForRole', 'memberOrThrow', 'packEntryRole', 'parseThemePack', 'pngSize', 'validateThemePack',
+  'loadAnimationRefSync', 'loadThemePack', 'loadThemePackSync', 'localeAssetFor', 'localeOrThrow',
+  'memberAssetDir', 'memberForRole', 'memberOrThrow', 'packEntryRole', 'parseThemePack', 'pngSize',
+  'validateThemePack',
 ];
 
 test('the barrel exports exactly this set and nothing else', async () => {

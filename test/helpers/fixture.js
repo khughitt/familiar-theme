@@ -37,6 +37,23 @@ export function writePack({ descriptor = DESCRIPTOR } = {}) {
   return dir;
 }
 
+// writePack plus a one-locale world: `world/home.png` (1x1) and its descriptor block.
+export const WORLD_BLOCK = `world:
+  asset-root: world
+  size: [1, 1]
+  locales:
+    home:
+      image: home.png
+      places: [[0, 0]]
+`;
+
+export function writeWorldPack() {
+  const dir = writePack({ descriptor: DESCRIPTOR + WORLD_BLOCK });
+  mkdirSync(join(dir, 'world'));
+  writeFileSync(join(dir, 'world', 'home.png'), TINY_PNG());
+  return dir;
+}
+
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 export function clipsManifest(rootBytes) {

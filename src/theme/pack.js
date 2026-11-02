@@ -466,40 +466,73 @@ function assertDescriptor(themeRealDir, descriptorPath, descriptorRealPath, desc
   }
 }
 
-function assertRealMemberDir(pack, member, realAssetDir, assetStat) {
+// One proof for every author-supplied asset directory: a member's (`label` is
+// `member "<id>"`) and the world's (`label` is `world`). The directory must
+// realpath-resolve strictly inside the real theme directory and be a directory.
+// Success replaces the lexical `assetDir` with the real one; failure drops it and
+// records `assetRootFault` for the gate to throw and runtime lookups to refuse with.
+function assertRealDir(pack, label, entity, realAssetDir, assetStat) {
+  const context = `theme "${pack.id}": ${label}: asset-root "${entity.assetRoot}"`;
   const fromTheme = relative(pack.dir, realAssetDir);
   if (fromTheme === '' || fromTheme === '..' || fromTheme.startsWith(`..${sep}`) || isAbsolute(fromTheme)) {
-    throw new Error(
-      `theme "${pack.id}": member "${member.id}": asset-root "${member.assetRoot}" `
-      + `resolves outside the real theme directory (${realAssetDir})`,
-    );
+    throw new Error(`${context} resolves outside the real theme directory (${realAssetDir})`);
   }
   if (!assetStat.isDirectory()) {
-    throw new Error(
-      `theme "${pack.id}": member "${member.id}": asset-root "${member.assetRoot}" `
-      + `is not a directory (${realAssetDir})`,
-    );
+    throw new Error(`${context} is not a directory (${realAssetDir})`);
   }
 }
 
-function withMemberProof(pack, member, prove) {
+const provenDir = (entity, realAssetDir) => ({
+  ...entity, assetDir: realAssetDir, assetDirProof: 'filesystem',
+});
+
+function faultedDir(pack, label, entity, cause) {
+  const context = `theme "${pack.id}": ${label}: asset-root "${entity.assetRoot}"`;
+  const assetRootFault = cause?.message?.startsWith(`theme "${pack.id}": ${label}:`)
+    ? cause
+    : cause?.code === 'ENOENT'
+      ? new Error(`${context} does not exist (${entity.assetDir})`, { cause })
+      : new Error(`${context} cannot be proven: ${cause?.message ?? String(cause)}`, { cause });
+  const { assetDir: _unproven, assetDirProof: _proof, ...rest } = entity;
+  return { ...rest, assetRootFault };
+}
+
+async function proveDir(pack, label, entity, { lstat, realpath }) {
   try {
-    const realAssetDir = prove(member);
-    return { ...member, assetDir: realAssetDir, assetDirProof: 'filesystem' };
+    const realAssetDir = await realpath(entity.assetDir);
+    assertRealDir(pack, label, entity, realAssetDir, await lstat(realAssetDir));
+    return provenDir(entity, realAssetDir);
   } catch (cause) {
-    const context = `theme "${pack.id}": member "${member.id}": asset-root "${member.assetRoot}"`;
-    const assetRootFault = cause?.message?.startsWith(`theme "${pack.id}": member "${member.id}":`)
-      ? cause
-      : cause?.code === 'ENOENT'
-        ? new Error(`${context} does not exist (${member.assetDir})`, { cause })
-        : new Error(`${context} cannot be proven: ${cause?.message ?? String(cause)}`, { cause });
-    const { assetDir: _unproven, assetDirProof: _proof, ...rest } = member;
-    return { ...rest, assetRootFault };
+    return faultedDir(pack, label, entity, cause);
   }
 }
 
-function replaceMembers(pack, members) {
-  return { ...pack, members: new Map(members.map((member) => [member.id, member])) };
+function proveDirSync(pack, label, entity, { lstat, realpath }) {
+  try {
+    const realAssetDir = realpath(entity.assetDir);
+    assertRealDir(pack, label, entity, realAssetDir, lstat(realAssetDir));
+    return provenDir(entity, realAssetDir);
+  } catch (cause) {
+    return faultedDir(pack, label, entity, cause);
+  }
+}
+
+// A proven world's locale images are re-rooted under its real directory, so the path
+// runtime proves and publishes is the one the loader proved, not a lexical alias.
+function rerootedLocales(world) {
+  if (world.assetDirProof !== 'filesystem') return world;
+  const locales = new Map([...world.locales].map(([name, locale]) => [
+    name, { ...locale, imagePath: resolve(world.assetDir, ...locale.image.split('/')) },
+  ]));
+  return { ...world, locales };
+}
+
+function withProofs(pack, members, world) {
+  return {
+    ...pack,
+    members: new Map(members.map((member) => [member.id, member])),
+    world: world === null ? null : rerootedLocales(world),
+  };
 }
 
 export async function loadThemePack(themeDir, {
@@ -520,18 +553,13 @@ export async function loadThemePack(themeDir, {
     themeRealDir,
     { descriptorLabel },
   );
+  const fs = { lstat, realpath };
   const members = [];
   for (const member of pack.members.values()) {
-    try {
-      const realAssetDir = await realpath(member.assetDir);
-      const assetStat = await lstat(realAssetDir);
-      assertRealMemberDir(pack, member, realAssetDir, assetStat);
-      members.push({ ...member, assetDir: realAssetDir, assetDirProof: 'filesystem' });
-    } catch (cause) {
-      members.push(withMemberProof(pack, member, () => { throw cause; }));
-    }
+    members.push(await proveDir(pack, `member "${member.id}"`, member, fs));
   }
-  return replaceMembers(pack, members);
+  const world = pack.world === null ? null : await proveDir(pack, 'world', pack.world, fs);
+  return withProofs(pack, members, world);
 }
 
 export function loadThemePackSync(themeDir, {
@@ -550,13 +578,11 @@ export function loadThemePackSync(themeDir, {
     themeRealDir,
     { descriptorLabel },
   );
-  const members = [...pack.members.values()].map((member) => withMemberProof(pack, member, () => {
-    const realAssetDir = realpath(member.assetDir);
-    const assetStat = lstat(realAssetDir);
-    assertRealMemberDir(pack, member, realAssetDir, assetStat);
-    return realAssetDir;
-  }));
-  return replaceMembers(pack, members);
+  const fs = { lstat, realpath };
+  const members = [...pack.members.values()]
+    .map((member) => proveDirSync(pack, `member "${member.id}"`, member, fs));
+  const world = pack.world === null ? null : proveDirSync(pack, 'world', pack.world, fs);
+  return withProofs(pack, members, world);
 }
 
 // null, not the default: whether an uncovered role falls back to `default` is the

@@ -1,7 +1,7 @@
 import { lstatSync as fsLstatSync, realpathSync as fsRealpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { STATES } from '../protocol/state.js';
-import { memberAssetDir } from './pack.js';
+import { localeOrThrow, memberAssetDir } from './pack.js';
 import { proveRegularFile } from './prove.js';
 
 // What the baker used to be, minus the baking. It still validates
@@ -63,4 +63,24 @@ export function assetsFor(pack, memberId, mode, {
     assets[state] = { terminal, rows: pack.rows };
   }
   return assets;
+}
+
+// The world's counterpart of assetsFor: the selected locale image is proven a regular
+// non-symlink file under the loader-proven world directory before its path is handed
+// out, so a deleted or symlinked locale throws here instead of publishing a dangling
+// path. One proof, two metadata calls; no image bytes are read.
+export function localeAssetFor(pack, name, {
+  lstat = fsLstatSync, realpath = fsRealpathSync,
+} = {}) {
+  const locale = localeOrThrow(pack, name);
+  const { world } = pack;
+  if (world.assetRootFault) throw world.assetRootFault;
+  if (world.assetDirProof !== 'filesystem') {
+    throw new Error(
+      `theme "${pack.id}": world: asset-root "${world.assetRoot}" `
+      + 'has not been filesystem-proven by a theme loader',
+    );
+  }
+  proveRegularFile(locale.imagePath, world.assetDir, { lstat, realpath }, `world: locale "${name}"`);
+  return { image: locale.imagePath, size: world.size, places: locale.places };
 }

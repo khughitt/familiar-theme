@@ -8,7 +8,7 @@ export {
   assertId, ID_RE, ROW_MIN, ROW_MAX, DEFAULT_ROWS, SPEC_VERSION,
 } from './theme/pack.js';
 export { CLIP_ROLES, ROLE_SPEC, loadAnimationMember, loadAnimationRefSync } from './theme/animation.js';
-export { assetsFor } from './theme/assets.js';
+export { assetsFor, localeAssetFor } from './theme/assets.js';
 export { packEntryRole } from './theme/content.js';
 export { STATES, assertState } from './protocol/state.js';
 export { LOCALES, assertLocale } from './protocol/locale.js';

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync,
+  mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,9 +10,14 @@ import {
   assetsFor,
   loadAnimationMember,
   loadAnimationRefSync,
+  loadThemePack,
   loadThemePackSync,
+  localeAssetFor,
+  parseThemePack,
 } from 'familiar-theme';
-import { writeClipsPack, writePack } from './helpers/fixture.js';
+import {
+  DESCRIPTOR, WORLD_BLOCK, writeClipsPack, writePack, writeWorldPack,
+} from './helpers/fixture.js';
 
 const proven = (t) => {
   const dir = writePack();
@@ -83,4 +88,130 @@ test('loadAnimationRefSync rejects a manifest that became a symlink after the re
   const { ref } = await loadAnimationMember(pack, 'pip');
   swapForSymlink(join(dir, 'sprites', 'pip', 'animation.yaml'));
   assert.throws(() => loadAnimationRefSync(ref), /(symlink|regular)/);
+});
+
+// The world is proven at load as a member is (spec §5.1), by both loaders alike.
+const worldPack = (t) => {
+  const dir = writeWorldPack();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+};
+const LOADERS = [
+  ['loadThemePack', (dir) => loadThemePack(dir)],
+  ['loadThemePackSync', async (dir) => loadThemePackSync(dir)],
+];
+
+test('both loaders prove a pack with a world', async (t) => {
+  const dir = worldPack(t);
+  const realWorld = realpathSync(join(dir, 'world'));
+  for (const [name, load] of LOADERS) {
+    const { world, members } = await load(dir);
+    assert.equal(world.assetDirProof, 'filesystem', name);
+    assert.equal(world.assetDir, realWorld, name);
+    assert.equal(world.assetRootFault, undefined, name);
+    assert.equal(world.locales.get('home').imagePath, join(realWorld, 'home.png'), name);
+    assert.deepEqual(world.size, { width: 1, height: 1 }, name);
+    assert.equal(members.get('pip').assetDirProof, 'filesystem', name);
+  }
+});
+
+test('a world directory symlinked inside the theme is proven at its real path', async (t) => {
+  const dir = worldPack(t);
+  mkdirSync(join(dir, 'art'));
+  renameSync(join(dir, 'world'), join(dir, 'art', 'world'));
+  symlinkSync(join('art', 'world'), join(dir, 'world'));
+  const realWorld = realpathSync(join(dir, 'art', 'world'));
+  for (const [name, load] of LOADERS) {
+    const { world } = await load(dir);
+    assert.equal(world.assetDir, realWorld, name);
+    assert.equal(world.locales.get('home').imagePath, join(realWorld, 'home.png'), name);
+  }
+});
+
+const assertWorldFault = (world, re, name) => {
+  assert.match(world.assetRootFault?.message ?? '', re, name);
+  assert.equal(world.assetDir, undefined, name);
+  assert.equal(world.assetDirProof, undefined, name);
+};
+
+test('loadThemePack records a world fault for a missing world directory', async (t) => {
+  const dir = worldPack(t);
+  rmSync(join(dir, 'world'), { recursive: true });
+  for (const [name, load] of LOADERS) {
+    const pack = await load(dir);
+    assertWorldFault(pack.world, /^theme "gate-fixture": world: asset-root "world" does not exist/, name);
+    assert.equal(pack.members.get('pip').assetDirProof, 'filesystem', name);
+  }
+});
+
+test('loadThemePack records a world fault for a world directory symlinked outside the theme', async (t) => {
+  const dir = worldPack(t);
+  const outside = mkdtempSync(join(tmpdir(), 'outside-'));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  renameSync(join(dir, 'world'), join(outside, 'world'));
+  symlinkSync(join(outside, 'world'), join(dir, 'world'));
+  for (const [name, load] of LOADERS) {
+    const pack = await load(dir);
+    assertWorldFault(
+      pack.world,
+      /^theme "gate-fixture": world: asset-root "world" resolves outside the real theme directory/,
+      name,
+    );
+  }
+});
+
+test('loadThemePack records a world fault for a world root that is not a directory', async (t) => {
+  const dir = worldPack(t);
+  rmSync(join(dir, 'world'), { recursive: true });
+  writeFileSync(join(dir, 'world'), 'not a directory');
+  for (const [name, load] of LOADERS) {
+    assertWorldFault((await load(dir)).world, /world: asset-root "world" is not a directory/, name);
+  }
+});
+
+test('localeAssetFor returns the proven image', (t) => {
+  const pack = loadThemePackSync(worldPack(t));
+  assert.deepEqual(localeAssetFor(pack, 'home'), {
+    image: join(pack.world.assetDir, 'home.png'),
+    size: { width: 1, height: 1 },
+    places: [{ x: 0, y: 0 }],
+  });
+});
+
+test('localeAssetFor throws when the locale image is a symlink', (t) => {
+  const pack = loadThemePackSync(worldPack(t));
+  swapForSymlink(join(pack.world.assetDir, 'home.png'));
+  assert.throws(
+    () => localeAssetFor(pack, 'home'),
+    /world: locale "home": .*home\.png is not a regular non-symlink file/,
+  );
+});
+
+test('localeAssetFor throws when the locale image was deleted after load', (t) => {
+  const pack = loadThemePackSync(worldPack(t));
+  rmSync(join(pack.world.assetDir, 'home.png'));
+  assert.throws(() => localeAssetFor(pack, 'home'), { code: 'ENOENT' });
+});
+
+test('localeAssetFor throws when the pack has no world', (t) => {
+  assert.throws(() => localeAssetFor(proven(t), 'home'), /has no world/);
+});
+
+test('localeAssetFor throws for a locale the world lacks', (t) => {
+  const pack = loadThemePackSync(worldPack(t));
+  assert.throws(() => localeAssetFor(pack, 'scoped'), /has no locale "scoped"/);
+});
+
+test('localeAssetFor throws the world fault, and refuses an unproven world', (t) => {
+  const dir = worldPack(t);
+  rmSync(join(dir, 'world'), { recursive: true });
+  assert.throws(
+    () => localeAssetFor(loadThemePackSync(dir), 'home'),
+    /world: asset-root "world" does not exist/,
+  );
+  const parsedOnly = parseThemePack(DESCRIPTOR + WORLD_BLOCK, dir);
+  assert.throws(
+    () => localeAssetFor(parsedOnly, 'home'),
+    /world: asset-root "world" has not been filesystem-proven/,
+  );
 });
