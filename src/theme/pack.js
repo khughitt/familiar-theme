@@ -241,7 +241,7 @@ function parsePlaces(raw, context, size) {
   if (!Array.isArray(raw) || raw.length === 0) {
     throw new Error(`${context}: places must list at least one place (found ${JSON.stringify(raw)})`);
   }
-  return raw.map((place, index) => {
+  return Object.freeze(raw.map((place, index) => {
     if (!isPair(place)) {
       throw new Error(
         `${context}: place ${index} must be [x, y], two whole numbers (found ${JSON.stringify(place)})`,
@@ -253,8 +253,8 @@ function parsePlaces(raw, context, size) {
         `${context}: place ${index} [${x}, ${y}] is outside size ${size.width}x${size.height}`,
       );
     }
-    return { x, y };
-  });
+    return Object.freeze({ x, y });
+  }));
 }
 
 // OPTIONAL: a pack without `world:` is a cast on a plain backdrop. When present, one
@@ -280,7 +280,7 @@ function parseWorld(raw, themeId, themeDir, members) {
       `${context}: size must be [width, height], two positive whole numbers (found ${JSON.stringify(rawSize)})`,
     );
   }
-  const size = { width: rawSize[0], height: rawSize[1] };
+  const size = Object.freeze({ width: rawSize[0], height: rawSize[1] });
 
   if (!isMap(raw.locales)) {
     throw new Error(`${context}: locales must be a map of locale names (found ${shown(raw.locales)})`);

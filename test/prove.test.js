@@ -178,6 +178,16 @@ test('localeAssetFor returns the proven image', (t) => {
   });
 });
 
+test('localeAssetFor hands out immutable size and places', (t) => {
+  const pack = loadThemePackSync(worldPack(t));
+  const { size, places } = localeAssetFor(pack, 'home');
+  assert.throws(() => { size.width = 99; }, TypeError);
+  assert.throws(() => { places.push({ x: 0, y: 0 }); }, TypeError);
+  assert.throws(() => { places[0].x = 5; }, TypeError);
+  assert.deepEqual(localeAssetFor(pack, 'home').places, [{ x: 0, y: 0 }]);
+  assert.deepEqual(pack.world.size, { width: 1, height: 1 });
+});
+
 test('localeAssetFor throws when the locale image is a symlink', (t) => {
   const pack = loadThemePackSync(worldPack(t));
   swapForSymlink(join(pack.world.assetDir, 'home.png'));
