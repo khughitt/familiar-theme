@@ -28,6 +28,11 @@ import { STATES } from '../protocol/state.js';
 //     passes through parseThemePack at all — which is why themeDirFor calls
 //     assertId ITSELF rather than trusting an upstream check.
 //
+// The world's asset-root and its locale images are author-supplied paths too. Both are
+// constrained by parseRelativePath (no absolute, empty, "." or ".." segments); the world
+// asset-root's segments are additionally ID_RE-checked, while locale image segments are
+// not.
+//
 // (An earlier version of this comment named spritePath, baker.js/cachePathFor and
 // `familiar bake`. All three are DELETED. That mattered: this is the only
 // documentation of a live security invariant, and a reader who greps those names,
