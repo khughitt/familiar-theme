@@ -207,7 +207,7 @@ test('places are non-empty integer pairs inside size', () => {
 // the two roots overlap.
 test('world asset-root may not touch a member root', () => {
   const at = (assetRoot, members) => () => withWorld({ ...EXAMPLE_WORLD, 'asset-root': assetRoot }, members);
-  assert.throws(at('sprites'), /lies on member "pip"'s asset-root/);
+  assert.throws(at('sprites'), /contains member "pip"'s asset-root/);
   assert.throws(at('sprites/pip'), /lies on member "pip"'s asset-root/);
   assert.throws(at('sprites/pip/world'), /inside member "pip"'s asset-root/);
   // A member root must end in sprites/<id>, so the nearest legal form of "world/pip".

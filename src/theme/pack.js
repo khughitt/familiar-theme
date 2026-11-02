@@ -231,7 +231,7 @@ function assertWorldClearOfMembers(context, root, members) {
       throw new Error(`${at} lies on ${theirs} — it is that asset-root`);
     }
     if (root.length < memberSegments.length) {
-      throw new Error(`${at} lies on ${theirs} "${member.assetRoot}" — it contains ${theirs}`);
+      throw new Error(`${at} contains ${theirs} "${member.assetRoot}"`);
     }
     throw new Error(`${at} lies inside ${theirs} "${member.assetRoot}"`);
   }
